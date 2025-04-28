@@ -1,16 +1,11 @@
 require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 
-// Create bot instance using the token from .env file
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// In-memory store: a map from user id to an array of saved messages.
-// Each saved message will have: id, type, content (data), and date.
 const userMessages = {};
 
-// Start command: provides a guide on how to use the bot.
 bot.start((ctx) => {
-    // Only show guide in private chat
     if (ctx.chat.type === 'private') {
         ctx.reply(
             `Welcome to the Repost Bot!
@@ -41,14 +36,12 @@ bot.command('clear', (ctx) => {
     }
 });
 
-// Helper: Save incoming DM messages
 function saveUserMessage(ctx) {
     const userId = ctx.from.id;
     if (!userMessages[userId]) {
         userMessages[userId] = [];
     }
 
-    // Determine message type and content.
     let messageData = {};
     if (ctx.message.text) {
         messageData = {
@@ -56,7 +49,6 @@ function saveUserMessage(ctx) {
             content: ctx.message.text
         };
     } else if (ctx.message.photo) {
-        // Choose the largest photo size.
         const photo = ctx.message.photo[ctx.message.photo.length - 1];
         messageData = {
             type: 'photo',
@@ -90,26 +82,23 @@ function saveUserMessage(ctx) {
             }
         };
     } else {
-        // Unsupported type.
         return null;
     }
 
-    // Create a new numeric ID.
     const newId = userMessages[userId].length + 1;
     const savedMessage = {
         id: newId,
         type: messageData.type,
         content: messageData.content,
-        date: new Date() // Save timestamp
+        date: new Date()
     };
 
     userMessages[userId].push(savedMessage);
     return savedMessage;
 }
 
-// DM handler: only process messages in private chat (ignoring /start as it's already handled)
 bot.on('message', (ctx) => {
-    if (ctx.chat.type !== 'private') return; // only accept DM messages
+    if (ctx.chat.type !== 'private') return;
     if (ctx.message.text && ctx.message.text.startsWith('/start')) return;
 
     const savedMessage = saveUserMessage(ctx);
@@ -117,13 +106,11 @@ bot.on('message', (ctx) => {
         return ctx.reply("Sorry, that type of message is unsupported.");
     }
 
-    // Reply with saved info.
     ctx.reply(`Message saved!
 ID: ${savedMessage.id}`,
 { reply_to_message_id: ctx.message.message_id });
 });
 
-// Inline query handler
 bot.on('inline_query', async (ctx) => {
     const userId = ctx.from.id;
     const query = ctx.inlineQuery.query.trim();
@@ -139,7 +126,6 @@ bot.on('inline_query', async (ctx) => {
             if (result) results.push(result);
         }
     } else {
-        // Always show last 5 messages, even if query is not numeric.
         const lastFive = messages.slice(-5).reverse();
         for (const msg of lastFive) {
             const result = createResult(msg);
@@ -154,14 +140,11 @@ bot.on('inline_query', async (ctx) => {
     }
 });
 
-// Helper to format time (HH:MM)
 function formatTime(date) {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-// Function to create an inline result based on a saved message.
 function createResult(savedMessage) {
-    // Use a unique inline result id with timestamp appended to avoid caching issues.
     const resultId = `${savedMessage.id}_${Date.now()}`;
     const shortTime = formatTime(savedMessage.date);
     const typeLabel = savedMessage.type.toUpperCase();
@@ -175,7 +158,6 @@ function createResult(savedMessage) {
 
     const description = `${typeLabel} | ${preview} | ID: ${savedMessage.id} | ${shortTime}`;
 
-    // Depending on the type, return the appropriate inline result.
     switch (savedMessage.type) {
         case 'text':
             return {
@@ -234,8 +216,6 @@ function createResult(savedMessage) {
             return null;
     }
 };
-
-// No chosen_inline_result handler is needed since there's no repost counter to update.
 
 bot.launch();
 console.log("Bot is running...");
