@@ -1,4 +1,4 @@
-name: TurboReBot deploy
+name: turbo-repost-bot deploy
 
 concurrency:
   group: ${{ github.repository }}-${{ github.ref }}
