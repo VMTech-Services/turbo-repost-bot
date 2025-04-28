@@ -36,10 +36,6 @@ bot.command('clear', (ctx) => {
     }
 });
 
-bot.command('test',(ctx)=>{
-    ctx.reply('test')
-})
-
 function saveUserMessage(ctx) {
     const userId = ctx.from.id;
     if (!userMessages[userId]) {
