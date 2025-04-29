@@ -99,8 +99,8 @@ jobs:
         run: |
           $repo = "${{ env.REPO_NAME }}"
           $tag  = "${{ needs.build-image.outputs.tag }}"
-          Write-Host "Starting container '$repo' from image '$repo:$tag'..."
-          docker run -d --name $repo -e BOT_TOKEN="${{ secrets.BOT_TOKEN }}" "$repo:$tag"
+          Write-Host "Starting container '${repo}' from image '${repo}:${tag}'..."
+          docker run -d --name $repo -e BOT_TOKEN="${{ secrets.BOT_TOKEN }}" "${repo}:${tag}"
 
   verify:
     name: Verify container health
