@@ -35,7 +35,6 @@ jobs:
     name: Teardown old container
     runs-on: [self-hosted, windows]
     needs: analyze
-    if: always()
     steps:
       - name: Stop & remove container
         shell: powershell
@@ -51,6 +50,7 @@ jobs:
   delete-image:
     name: Delete old images
     runs-on: [self-hosted, windows]
+    needs: teardown
     steps:
       - name: Remove all images named $REPO_NAME
         shell: powershell
@@ -67,6 +67,7 @@ jobs:
   build-image:
     name: Build new Docker image
     runs-on: [self-hosted, windows]
+    needs: analyze
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
