@@ -91,8 +91,8 @@ jobs:
         shell: powershell
         run: |
           $repo = "${{ env.REPO_NAME }}"
-          Write-Host "Starting container '$repo' from image '$repo:latest'..."
-          docker run -d --name $repo -e BOT_TOKEN="${{ secrets.BOT_TOKEN }}" "$repo:latest"
+          Write-Host "Starting container '$repo' from image '${repo}:latest'..."
+          docker run -d --name $repo -e BOT_TOKEN="${{ secrets.BOT_TOKEN }}" "${repo}:latest"
 
   verify:
     name: Verify container health
