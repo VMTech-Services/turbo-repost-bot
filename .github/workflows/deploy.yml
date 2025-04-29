@@ -67,7 +67,9 @@ jobs:
   build-image:
     name: Build new Docker image
     runs-on: [self-hosted, windows]
-    needs: analyze
+    needs: 
+      - analyze
+      - delete-image
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
