@@ -9,7 +9,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  REPO_NAME: ${{ github.repository }}
+  REPO_NAME: turbo_repost_bot
 
 jobs:
   analyze:
@@ -22,7 +22,7 @@ jobs:
         id: check
         shell: powershell
         run: |
-          $name = "${{ env.REPO_NAME }}"
+          $name    = "${{ env.REPO_NAME }}"
           $running = if (docker ps -q -f name=$name) { 'true' } else { 'false' }
           echo "::set-output name=running::$running"
           if ($running -eq 'true') {
@@ -33,62 +33,88 @@ jobs:
 
   teardown:
     name: 🛑 Teardown old container
-    needs: analyze
     runs-on: [self-hosted, windows]
-    if: always()  # удаляем даже если analyze упал
+    needs: analyze
+    if: always()   # даже если analyze упал/пропустился
     steps:
       - name: Stop & remove container
         shell: powershell
         run: |
           $name = "${{ env.REPO_NAME }}"
           if (docker ps -a -q -f name=$name) {
-            Write-Host "Stopping and removing '$name'..."
+            Write-Host "⏹️ Stopping and removing container '$name'..."
             docker rm -f $name
           } else {
-            Write-Host "No container '$name' to remove."
+            Write-Host "ℹ️ No container '$name' to remove."
           }
 
-  build-deploy:
-    name: 🛠️ Build & deploy new image
-    needs: analyze
+  delete-image:
+    name: 🗑️ Delete old images
     runs-on: [self-hosted, windows]
     steps:
-      - name: Checkout code
+      - name: Remove all images named $REPO_NAME
+        shell: powershell
+        run: |
+          $name = "${{ env.REPO_NAME }}"
+          $ids  = docker images -q $name
+          if ($ids) {
+            Write-Host "🗑️ Removing images: $ids"
+            $ids | ForEach-Object { docker rmi -f $_ }
+          } else {
+            Write-Host "ℹ️ No images named '$name' found."
+          }
+
+  build-image:
+    name: 🛠️ Build new Docker image
+    runs-on: [self-hosted, windows]
+    steps:
+      - name: Checkout repository
         uses: actions/checkout@v3
         with:
           fetch-depth: 1
 
-      - name: Build Docker image with timestamp tag
+      - name: Build image with timestamp tag
         id: build
         shell: powershell
         run: |
           $repo      = "${{ env.REPO_NAME }}"
           $timestamp = (Get-Date).ToString('yyyyMMddHHmmss')
-          Write-Host "==> Building images..."
           docker build `
             -t "${repo}:latest" `
             -t "${repo}:${timestamp}" `
             .
           echo "::set-output name=tag::$timestamp"
-          Write-Host "✅ Built images: ${repo}:latest and ${repo}:${timestamp}"
+          Write-Host "✅ Built ${repo}:latest and ${repo}:${timestamp}"
 
-      - name: Run new container
+  run-container:
+    name: 🚀 Run new container
+    runs-on: [self-hosted, windows]
+    needs:
+      - teardown
+      - build-image
+    steps:
+      - name: Start container
         shell: powershell
         run: |
           $repo = "${{ env.REPO_NAME }}"
-          $tag  = "${{ steps.build.outputs.tag }}"
-          Write-Host "==> Starting container '${repo}' from image '${repo}:${tag}'..."
+          $tag  = "${{ needs.build-image.outputs.tag }}"
           docker run -d --name $repo -e BOT_TOKEN="${{ secrets.BOT_TOKEN }}" "${repo}:${tag}"
+          Write-Host "➡️ Container '$repo' started from image '$repo:$tag'."
 
-      - name: Wait 5 seconds and verify
+  verify:
+    name: ✔️ Verify container health
+    runs-on: [self-hosted, windows]
+    needs: run-container
+    steps:
+      - name: Wait 5s and check running state
         shell: powershell
         run: |
-          $name = "${{ env.REPO_NAME }}"
+          $name    = "${{ env.REPO_NAME }}"
           Start-Sleep -Seconds 5
-          $running = (docker inspect -f '{{.State.Running}}' $name).Trim()
-          if ($running -eq 'true') {
-            Write-Host "✅ Container '$name' is up and running."
+          $state   = (docker inspect -f '{{.State.Status}}' $name).Trim()
+          if ($state -eq 'running') {
+            Write-Host "✅ Container '$name' is running."
           } else {
-            Write-Error "❌ Container '$name' failed to start (state=$running)."
+            Write-Error "❌ Container '$name' state is '$state'. Failing."
             exit 1
           }
