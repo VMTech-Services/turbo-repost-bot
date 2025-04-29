@@ -57,30 +57,38 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 1
+
       - name: Build Docker image with timestamp tag
         id: build
         shell: powershell
         run: |
-          $repo = "${{ env.REPO_NAME }}"
+          $repo      = "${{ env.REPO_NAME }}"
           $timestamp = (Get-Date).ToString('yyyyMMddHHmmss')
-          docker build -t $repo:latest -t $repo:$timestamp .
+          Write-Host "==> Building images..."
+          docker build `
+            -t "${repo}:latest" `
+            -t "${repo}:${timestamp}" `
+            .
           echo "::set-output name=tag::$timestamp"
-          Write-Host "Built images: $repo:latest and $repo:$timestamp"
+          Write-Host "✅ Built images: ${repo}:latest and ${repo}:${timestamp}"
+
       - name: Run new container
         shell: powershell
         run: |
           $repo = "${{ env.REPO_NAME }}"
           $tag  = "${{ steps.build.outputs.tag }}"
-          Write-Host "Starting container '$repo' from image '$repo:$tag'..."
-          docker run -d --name $repo -e BOT_TOKEN="${{ secrets.BOT_TOKEN }}" $repo:$tag
+          Write-Host "==> Starting container '${repo}' from image '${repo}:${tag}'..."
+          docker run -d --name $repo -e BOT_TOKEN="${{ secrets.BOT_TOKEN }}" "${repo}:${tag}"
+
       - name: Wait 5 seconds and verify
         shell: powershell
         run: |
           $name = "${{ env.REPO_NAME }}"
           Start-Sleep -Seconds 5
-          if ((docker inspect -f '{{.State.Running}}' $name).Trim() -eq 'true') {
+          $running = (docker inspect -f '{{.State.Running}}' $name).Trim()
+          if ($running -eq 'true') {
             Write-Host "✅ Container '$name' is up and running."
           } else {
-            Write-Error "❌ Container '$name' failed to start."
+            Write-Error "❌ Container '$name' failed to start (state=$running)."
             exit 1
           }
