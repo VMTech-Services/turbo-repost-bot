@@ -20,7 +20,7 @@ jobs:
     steps:
       - name: Check if container is running
         id: check
-        shell: pwsh
+        shell: powershell
         run: |
           $name = "${{ env.REPO_NAME }}"
           $running = if (docker ps -q -f name=$name) { 'true' } else { 'false' }
@@ -38,7 +38,7 @@ jobs:
     if: always()  # удаляем даже если analyze упал
     steps:
       - name: Stop & remove container
-        shell: pwsh
+        shell: powershell
         run: |
           $name = "${{ env.REPO_NAME }}"
           if (docker ps -a -q -f name=$name) {
@@ -59,7 +59,7 @@ jobs:
           fetch-depth: 1
       - name: Build Docker image with timestamp tag
         id: build
-        shell: pwsh
+        shell: powershell
         run: |
           $repo = "${{ env.REPO_NAME }}"
           $timestamp = (Get-Date).ToString('yyyyMMddHHmmss')
@@ -67,14 +67,14 @@ jobs:
           echo "::set-output name=tag::$timestamp"
           Write-Host "Built images: $repo:latest and $repo:$timestamp"
       - name: Run new container
-        shell: pwsh
+        shell: powershell
         run: |
           $repo = "${{ env.REPO_NAME }}"
           $tag  = "${{ steps.build.outputs.tag }}"
           Write-Host "Starting container '$repo' from image '$repo:$tag'..."
           docker run -d --name $repo -e BOT_TOKEN="${{ secrets.BOT_TOKEN }}" $repo:$tag
       - name: Wait 5 seconds and verify
-        shell: pwsh
+        shell: powershell
         run: |
           $name = "${{ env.REPO_NAME }}"
           Start-Sleep -Seconds 5
