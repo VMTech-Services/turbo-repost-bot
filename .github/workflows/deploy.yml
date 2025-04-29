@@ -73,19 +73,12 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Build image with timestamp tag
-        id: build
+      - name: Build image
         shell: powershell
         run: |
-          $repo      = "${{ env.REPO_NAME }}"
-          $timestamp = (Get-Date).ToString('yyyyMMddHHmmss')
-          Write-Host "Building images..."
-          docker build `
-            -t "${repo}:latest" `
-            -t "${repo}:${timestamp}" `
-            .
-          echo "tag=$timestamp" >> $env:GITHUB_OUTPUT
-          Write-Host "Built ${repo}:latest and ${repo}:${timestamp}"
+          $repo = "${{ env.REPO_NAME }}"
+          Write-Host "Building image '${repo}:latest'..."
+          docker build -t "${repo}:latest" .
 
   run-container:
     name: Run new container
@@ -98,9 +91,8 @@ jobs:
         shell: powershell
         run: |
           $repo = "${{ env.REPO_NAME }}"
-          $tag  = "${{ needs.build-image.outputs.tag }}"
-          Write-Host "Starting container '${repo}' from image '${repo}:${tag}'..."
-          docker run -d --name $repo -e BOT_TOKEN="${{ secrets.BOT_TOKEN }}" "${repo}:${tag}"
+          Write-Host "Starting container '$repo' from image '$repo:latest'..."
+          docker run -d --name $repo -e BOT_TOKEN="${{ secrets.BOT_TOKEN }}" "$repo:latest"
 
   verify:
     name: Verify container health
