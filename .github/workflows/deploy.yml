@@ -12,30 +12,11 @@ env:
   REPO_NAME: turbo_repost_bot
 
 jobs:
-  analyze:
-    name: Analyze existing container
-    runs-on: [self-hosted, windows]
-    outputs:
-      was-running: ${{ steps.check.outputs.running }}
-    steps:
-      - name: Check if container is running
-        id: check
-        shell: powershell
-        run: |
-          $name    = "${{ env.REPO_NAME }}"
-          $running = if (docker ps -q -f name=$name) { 'true' } else { 'false' }
-          echo "running=$running" >> $env:GITHUB_OUTPUT
-          if ($running -eq 'true') {
-            Write-Host "Container '$name' was running before update."
-          } else {
-            Write-Host "Container '$name' was NOT running."
-          }
-
-  teardown:
-    name: Teardown old container
+  cleanup:
+    name: Cleanup old container and image
     runs-on: [self-hosted, windows]
     steps:
-      - name: Stop & remove container
+      - name: Stop and remove container
         shell: powershell
         run: |
           $name = "${{ env.REPO_NAME }}"
@@ -43,15 +24,10 @@ jobs:
             Write-Host "Stopping and removing container '$name'..."
             docker rm -f $name
           } else {
-            Write-Host "No container '$name' to remove."
+            Write-Host "No container '$name' found."
           }
 
-  delete-image:
-    name: Delete old images
-    runs-on: [self-hosted, windows]
-    needs: teardown
-    steps:
-      - name: Remove all images named $REPO_NAME
+      - name: Remove old image
         shell: powershell
         run: |
           $name = "${{ env.REPO_NAME }}"
@@ -63,43 +39,36 @@ jobs:
             Write-Host "No images named '$name' found."
           }
 
-  build-image:
-    name: Build new Docker image
+  build:
+    name: Checkout code and build image
     runs-on: [self-hosted, windows]
-    needs: delete-image
+    needs: cleanup
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
           fetch-depth: 1
 
-      - name: Build image
+      - name: Build Docker image
         shell: powershell
         run: |
           $repo = "${{ env.REPO_NAME }}"
           Write-Host "Building image '${repo}:latest'..."
           docker build -t "${repo}:latest" .
 
-  run-container:
-    name: Run new container
+  deploy:
+    name: Run container and verify
     runs-on: [self-hosted, windows]
-    needs:
-      - teardown
-      - build-image
+    needs: build
     steps:
-      - name: Start container
+      - name: Start new container
         shell: powershell
         run: |
           $repo = "${{ env.REPO_NAME }}"
           Write-Host "Starting container '$repo' from image '${repo}:latest'..."
           docker run -d --name $repo -e BOT_TOKEN="${{ secrets.BOT_TOKEN }}" "${repo}:latest"
 
-  verify:
-    name: Verify container health
-    runs-on: [self-hosted, windows]
-    needs: run-container
-    steps:
-      - name: Wait 5s and check running state
+      - name: Verify container is running
         shell: powershell
         run: |
           $name  = "${{ env.REPO_NAME }}"
