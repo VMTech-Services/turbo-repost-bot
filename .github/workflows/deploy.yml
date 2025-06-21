@@ -1,82 +1,51 @@
-name: turbo-repost-bot deploy
+name: Build and Deploy Turbo repost bot
 
 on:
   push:
-    branches: [main]
-
-concurrency:
-  group: ${{ github.repository }}-${{ github.ref_name }}
-  cancel-in-progress: true
-
-env:
-  REPO_NAME: turbo_repost_bot
+    branches:
+      - main
 
 jobs:
-  cleanup:
-    name: Cleanup old container and image
-    runs-on: [self-hosted, windows]
-    steps:
-      - name: Stop and remove container
-        shell: powershell
-        run: |
-          $name = "${{ env.REPO_NAME }}"
-          if (docker ps -a -q -f name=$name) {
-            Write-Host "Stopping and removing container '$name'..."
-            docker rm -f $name
-          } else {
-            Write-Host "No container '$name' found."
-          }
+  build-and-push:
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
 
-      - name: Remove old image
-        shell: powershell
-        run: |
-          $name = "${{ env.REPO_NAME }}"
-          $ids  = docker images -q $name
-          if ($ids) {
-            Write-Host "Removing images: $ids"
-            $ids | ForEach-Object { docker rmi -f $_ }
-          } else {
-            Write-Host "No images named '$name' found."
-          }
+    runs-on: ubuntu-latest
 
-  build:
-    name: Checkout code and build image
-    runs-on: [self-hosted, windows]
-    needs: cleanup
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-        with:
-          fetch-depth: 1
+
+      - name: Log in to GitHub Docker Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Build Docker image
-        shell: powershell
         run: |
-          $repo = "${{ env.REPO_NAME }}"
-          Write-Host "Building image '${repo}:latest'..."
-          docker build -t "${repo}:latest" .
+          IMAGE_NAME=ghcr.io/${{ github.repository }}:latest
+          IMAGE_NAME=${IMAGE_NAME,,}
+          docker build -t $IMAGE_NAME .
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
 
-  deploy:
-    name: Run container and verify
-    runs-on: [self-hosted, windows]
-    needs: build
+      - name: Push Docker image
+        run: docker push $IMAGE_NAME
+
+  remote-deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+
     steps:
-      - name: Start new container
-        shell: powershell
-        run: |
-          $repo = "${{ env.REPO_NAME }}"
-          Write-Host "Starting container '$repo' from image '${repo}:latest'..."
-          docker run -d --name $repo -e BOT_TOKEN="${{ secrets.BOT_TOKEN }}" "${repo}:latest"
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Verify container is running
-        shell: powershell
+      - name: Deploy on remote server
         run: |
-          $name  = "${{ env.REPO_NAME }}"
-          Start-Sleep -Seconds 5
-          $state = (docker inspect -f '{{.State.Status}}' $name).Trim()
-          if ($state -eq 'running') {
-            Write-Host "Container '$name' is running."
-          } else {
-            Write-Error "Container '$name' state is '$state'. Failing."
-            exit 1
-          }
+          ssh -o StrictHostKeyChecking=no ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} << 'EOF'
+            cd ${{ secrets.REMOTE_PATH }} 
+            docker compose pull
+            docker compose up -d
+          EOF

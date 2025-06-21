@@ -1,0 +1,8 @@
+services:
+  app:
+    image: ghcr.io/vmtech-services/turbo-repost-bot:latest
+    build:
+      context: .
+    restart: unless-stopped
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
